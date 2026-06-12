@@ -598,22 +598,31 @@ export const useRecordsStore = create<RecordsState>((set, get) => ({
     const storedEvidence = loadEvidence();
     const storedTemplates = loadTemplates();
 
-    // 仅当存储中有数据时才覆盖（避免覆盖首次加载的 mock 数据）
-    if (storedRecords && storedRecords.length > 0) {
+    // 仅当 localStorage 中没有对应 key 时（即首次使用），才使用 mock 数据
+    // 如果存储中有数据（包括空数组），说明用户进行过操作，应使用存储的数据
+    if (storedRecords !== null) {
       set({ records: storedRecords });
+      if (storedRecords.length === 0) {
+        persistRecords(storedRecords);
+      }
     } else {
-      // 如果存储为空，使用 mock 数据并持久化
       persistRecords(get().records);
     }
 
-    if (storedEvidence && storedEvidence.length > 0) {
+    if (storedEvidence !== null) {
       set({ evidence: storedEvidence });
+      if (storedEvidence.length === 0) {
+        persistEvidence(storedEvidence);
+      }
     } else {
       persistEvidence(get().evidence);
     }
 
-    if (storedTemplates && storedTemplates.length > 0) {
+    if (storedTemplates !== null) {
       set({ templates: storedTemplates });
+      if (storedTemplates.length === 0) {
+        persistTemplates(storedTemplates);
+      }
     } else {
       persistTemplates(get().templates);
     }

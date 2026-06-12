@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { NoiseRecord, Evidence, NoiseType, ImpactCategory } from '@/types';
+import type { NoiseRecord, Evidence, NoiseType, ImpactCategory, RecordTemplate } from '@/types';
 import { generateId } from '@/utils/idUtils';
 
 // ==================== 类型定义 ====================
@@ -29,11 +29,13 @@ export interface RecordsState {
   // ===== 数据状态 =====
   records: NoiseRecord[];         // 噪音记录列表
   evidence: Evidence[];           // 证据材料列表
+  templates: RecordTemplate[];    // 记录模板列表
 
   // ===== UI 状态 =====
   isFormModalOpen: boolean;       // 记录表单弹窗是否打开
   editingRecordId: string | null; // 当前编辑的记录ID（null表示新增）
   previewEvidenceId: string | null; // 当前预览的证据ID
+  templateToApply: RecordTemplate | null; // 待应用的模板（新建记录时使用）
 
   // ===== 筛选状态 =====
   filters: Filters;
@@ -46,6 +48,15 @@ export interface RecordsState {
   // ===== 证据操作方法 =====
   addEvidence: (evidence: Omit<Evidence, 'id' | 'createdAt'>) => void;
   deleteEvidence: (id: string) => void;
+
+  // ===== 模板操作方法 =====
+  addTemplate: (template: Omit<RecordTemplate, 'id' | 'createdAt' | 'updatedAt' | 'sortOrder'>) => void;
+  updateTemplate: (id: string, partial: Partial<RecordTemplate>) => void;
+  deleteTemplate: (id: string) => void;
+  reorderTemplates: (templateIds: string[]) => void;
+  createTemplateFromRecord: (recordId: string, name: string) => void;
+  applyTemplate: (template: RecordTemplate | null) => void;
+  openNewFormWithTemplate: (templateId: string) => void;
 
   // ===== UI 操作方法 =====
   openNewForm: () => void;
@@ -65,6 +76,7 @@ export interface RecordsState {
 const STORAGE_KEYS = {
   RECORDS: 'noise_records',
   EVIDENCE: 'noise_evidence',
+  TEMPLATES: 'noise_templates',
 } as const;
 
 // ==================== 默认筛选条件 ====================
@@ -271,15 +283,88 @@ const loadEvidence = (): Evidence[] | null => {
   return null;
 };
 
+/**
+ * 保存模板到 LocalStorage
+ */
+const persistTemplates = (templates: RecordTemplate[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
+  } catch (e) {
+    console.error('保存模板失败:', e);
+  }
+};
+
+/**
+ * 从 LocalStorage 加载模板
+ */
+const loadTemplates = (): RecordTemplate[] | null => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.TEMPLATES);
+    if (data) {
+      return JSON.parse(data) as RecordTemplate[];
+    }
+  } catch (e) {
+    console.error('加载模板失败:', e);
+  }
+  return null;
+};
+
+/**
+ * 生成 Mock 模板数据
+ */
+const generateMockTemplates = (): RecordTemplate[] => {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: 'mock_template_001',
+      name: '楼上深夜脚步声',
+      noiseType: 'footsteps',
+      intensity: 4,
+      location: 'upstairs',
+      impactTagIds: ['sleep_interruption', 'emotion_irritable'],
+      description: '楼上住户深夜来回走动，脚步声清晰可闻，影响休息。',
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'mock_template_002',
+      name: '隔壁装修施工',
+      noiseType: 'decoration',
+      intensity: 5,
+      location: 'next_door',
+      impactTagIds: ['work_interruption', 'work_distraction', 'health_headache'],
+      description: '隔壁装修，电钻、敲击声持续不断，无法正常工作和休息。',
+      sortOrder: 1,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'mock_template_003',
+      name: '楼下音乐派对',
+      noiseType: 'music',
+      intensity: 4,
+      location: 'downstairs',
+      impactTagIds: ['sleep_insomnia', 'emotion_anxiety'],
+      description: '楼下播放音乐，低音炮震动感强，持续到深夜。',
+      sortOrder: 2,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+};
+
 // ==================== 创建 Store ====================
 
 export const useRecordsStore = create<RecordsState>((set, get) => ({
   // ===== 初始数据 =====
   records: generateMockRecords(),
   evidence: generateMockEvidence(),
+  templates: generateMockTemplates(),
   isFormModalOpen: false,
   editingRecordId: null,
   previewEvidenceId: null,
+  templateToApply: null,
   filters: { ...DEFAULT_FILTERS },
 
   // ===== 记录操作 =====
@@ -372,6 +457,93 @@ export const useRecordsStore = create<RecordsState>((set, get) => ({
     persistRecords(newRecords);
   },
 
+  // ===== 模板操作 =====
+
+  addTemplate: (templateData) => {
+    const now = new Date().toISOString();
+    const state = get();
+    const maxSortOrder = state.templates.length > 0
+      ? Math.max(...state.templates.map((t) => t.sortOrder))
+      : -1;
+
+    const newTemplate: RecordTemplate = {
+      ...templateData,
+      id: generateId(),
+      sortOrder: maxSortOrder + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const newTemplates = [...state.templates, newTemplate];
+    set({ templates: newTemplates });
+    persistTemplates(newTemplates);
+  },
+
+  updateTemplate: (id, partial) => {
+    const newTemplates = get().templates.map((template) =>
+      template.id === id
+        ? { ...template, ...partial, updatedAt: new Date().toISOString() }
+        : template
+    );
+    set({ templates: newTemplates });
+    persistTemplates(newTemplates);
+  },
+
+  deleteTemplate: (id) => {
+    const newTemplates = get().templates.filter((t) => t.id !== id);
+    set({ templates: newTemplates });
+    persistTemplates(newTemplates);
+  },
+
+  reorderTemplates: (templateIds) => {
+    const state = get();
+    const newTemplates = templateIds.map((id, index) => {
+      const template = state.templates.find((t) => t.id === id);
+      return template
+        ? { ...template, sortOrder: index, updatedAt: new Date().toISOString() }
+        : null;
+    }).filter((t): t is RecordTemplate => t !== null);
+
+    // 保留不在列表中的模板（虽然理论上应该都在）
+    const remainingTemplates = state.templates.filter(
+      (t) => !templateIds.includes(t.id)
+    );
+
+    const finalTemplates = [...newTemplates, ...remainingTemplates];
+    set({ templates: finalTemplates });
+    persistTemplates(finalTemplates);
+  },
+
+  createTemplateFromRecord: (recordId, name) => {
+    const state = get();
+    const record = state.records.find((r) => r.id === recordId);
+    if (!record) return;
+
+    state.addTemplate({
+      name,
+      noiseType: record.noiseType,
+      intensity: record.intensity,
+      location: record.location,
+      impactTagIds: [...record.impactTagIds],
+      description: record.description,
+    });
+  },
+
+  applyTemplate: (template) => {
+    set({ templateToApply: template });
+  },
+
+  openNewFormWithTemplate: (templateId) => {
+    const template = get().templates.find((t) => t.id === templateId);
+    if (template) {
+      set({
+        templateToApply: template,
+        isFormModalOpen: true,
+        editingRecordId: null,
+      });
+    }
+  },
+
   // ===== UI 操作 =====
 
   openNewForm: () => {
@@ -392,6 +564,7 @@ export const useRecordsStore = create<RecordsState>((set, get) => ({
     set({
       isFormModalOpen: false,
       editingRecordId: null,
+      templateToApply: null,
     });
   },
 
@@ -423,6 +596,7 @@ export const useRecordsStore = create<RecordsState>((set, get) => ({
   hydrateFromStorage: () => {
     const storedRecords = loadRecords();
     const storedEvidence = loadEvidence();
+    const storedTemplates = loadTemplates();
 
     // 仅当存储中有数据时才覆盖（避免覆盖首次加载的 mock 数据）
     if (storedRecords && storedRecords.length > 0) {
@@ -436,6 +610,12 @@ export const useRecordsStore = create<RecordsState>((set, get) => ({
       set({ evidence: storedEvidence });
     } else {
       persistEvidence(get().evidence);
+    }
+
+    if (storedTemplates && storedTemplates.length > 0) {
+      set({ templates: storedTemplates });
+    } else {
+      persistTemplates(get().templates);
     }
   },
 }));

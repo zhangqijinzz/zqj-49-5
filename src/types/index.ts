@@ -91,3 +91,17 @@ export interface TimeRangeStats {
   evening: number;    // 傍晚时段（18:00-22:00）记录数
   night: number;      // 夜间时段（22:00-6:00）记录数
 }
+
+// 记录模板：保存常用的噪音记录配置，用于快速新建
+export interface RecordTemplate {
+  id: string;                   // 模板唯一标识
+  name: string;                 // 模板名称
+  noiseType: NoiseType;         // 噪音类型
+  intensity: 1 | 2 | 3 | 4 | 5; // 噪音强度
+  location: LocationTag;        // 来源位置
+  impactTagIds: string[];       // 关联的影响标签ID列表
+  description: string;          // 详细描述
+  sortOrder: number;            // 排序权重
+  createdAt: string;            // 创建时间（ISO格式）
+  updatedAt: string;            // 更新时间（ISO格式）
+}

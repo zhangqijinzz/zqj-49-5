@@ -6,6 +6,7 @@ import {
   FileBarChart,
   Volume2,
   Plus,
+  Layers,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/Button';
@@ -47,6 +48,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     label: '噪音日志',
     hint: '记录与管理',
+  },
+  {
+    to: '/templates',
+    icon: Layers,
+    label: '记录模板',
+    hint: '常用配置模板',
   },
   {
     to: '/export',

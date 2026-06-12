@@ -4,6 +4,7 @@ import Dashboard from '@/pages/Dashboard';
 import NoiseLog from '@/pages/NoiseLog';
 import RecordDetail from '@/pages/RecordDetail';
 import ExportReport from '@/pages/ExportReport';
+import Templates from '@/pages/Templates';
 
 const router = createBrowserRouter([
   {
@@ -26,6 +27,10 @@ const router = createBrowserRouter([
             element: <RecordDetail />,
           },
         ],
+      },
+      {
+        path: 'templates',
+        element: <Templates />,
       },
       {
         path: 'export',

@@ -12,6 +12,8 @@ import {
   Volume2,
   AlertTriangle,
   Tag,
+  Save,
+  Check,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -37,6 +39,7 @@ import type { ImpactCategory } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
 import { EvidenceUploader, EvidenceGrid } from '@/components/record/EvidenceUploader';
 import type { NoiseRecord, Evidence } from '@/types';
 
@@ -51,6 +54,12 @@ const RecordDetail: React.FC = () => {
   const evidence = useRecordsStore((s) => s.evidence);
   const deleteRecord = useRecordsStore((s) => s.deleteRecord);
   const openEditForm = useRecordsStore((s) => s.openEditForm);
+  const createTemplateFromRecord = useRecordsStore((s) => s.createTemplateFromRecord);
+
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = React.useState(false);
+  const [templateName, setTemplateName] = React.useState('');
+  const [templateNameError, setTemplateNameError] = React.useState('');
+  const [saveTemplateSuccess, setSaveTemplateSuccess] = React.useState(false);
 
   const record = React.useMemo(() => {
     return records.find((r) => r.id === id);
@@ -88,6 +97,31 @@ const RecordDetail: React.FC = () => {
         deleteRecord(record.id);
         navigate('/log');
       }
+    }
+  };
+
+  const handleOpenSaveTemplate = () => {
+    if (record) {
+      setTemplateName(record.title);
+      setTemplateNameError('');
+      setSaveTemplateSuccess(false);
+      setIsSaveTemplateModalOpen(true);
+    }
+  };
+
+  const handleSaveTemplate = () => {
+    if (!templateName.trim()) {
+      setTemplateNameError('请输入模板名称');
+      return;
+    }
+
+    if (record) {
+      createTemplateFromRecord(record.id, templateName.trim());
+      setSaveTemplateSuccess(true);
+      setTimeout(() => {
+        setIsSaveTemplateModalOpen(false);
+        setSaveTemplateSuccess(false);
+      }, 1200);
     }
   };
 
@@ -158,6 +192,14 @@ const RecordDetail: React.FC = () => {
             onClick={() => openEditForm(record.id)}
           >
             编辑
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Save className="w-4 h-4" />}
+            onClick={handleOpenSaveTemplate}
+          >
+            存为模板
           </Button>
           <Button
             variant="danger"
@@ -392,6 +434,93 @@ const RecordDetail: React.FC = () => {
           </CardContent>
         </Card>
       </section>
+
+      <Modal
+        open={isSaveTemplateModalOpen}
+        onClose={() => setIsSaveTemplateModalOpen(false)}
+        title="保存为模板"
+        subtitle="将当前记录的配置保存为模板，下次快速新建"
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setIsSaveTemplateModalOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              icon={saveTemplateSuccess ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              onClick={handleSaveTemplate}
+              disabled={saveTemplateSuccess}
+            >
+              {saveTemplateSuccess ? '已保存' : '保存模板'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              模板名称
+              <span className="text-rose-500 ml-0.5">*</span>
+            </label>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => {
+                setTemplateName(e.target.value);
+                if (templateNameError) {
+                  setTemplateNameError('');
+                }
+              }}
+              placeholder="请输入模板名称"
+              className={cn(
+                'w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-700 placeholder:text-slate-400',
+                'focus:outline-none focus:ring-2 transition-all',
+                templateNameError
+                  ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-400'
+                  : 'border-slate-200 focus:ring-primary/20 focus:border-primary',
+              )}
+              autoFocus
+            />
+            {templateNameError && (
+              <p className="mt-1.5 text-xs text-rose-600">
+                {templateNameError}
+              </p>
+            )}
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <p className="text-xs font-medium text-slate-500 mb-3">将保留以下内容：</p>
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-slate-400" />
+                <span>噪音类型：{formatNoiseType(record.noiseType)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span>强度等级：{record.intensity} 级</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-slate-400" />
+                <span>来源位置：{formatLocation(record.location)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-slate-400" />
+                <span>影响标签：{record.impactTagIds.length} 个</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-400" />
+                <span>描述内容：{record.description ? '保留' : '无'}</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-200">
+              * 时间、日期、证据等信息不会保存到模板
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

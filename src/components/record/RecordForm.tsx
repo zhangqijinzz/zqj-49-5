@@ -8,8 +8,10 @@ import {
   Check,
   X,
   Sparkles,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
-import type { NoiseRecord, NoiseType, LocationTag } from '@/types';
+import type { NoiseRecord, NoiseType, LocationTag, RecordTemplate } from '@/types';
 import { getNoiseTypeConfig } from '@/constants/noiseTypes';
 import { formatNoiseType } from '@/utils/formatUtils';
 import { calculateDuration, formatDate } from '@/utils/dateUtils';
@@ -148,6 +150,9 @@ export const RecordForm: React.FC<RecordFormProps> = ({
   const addRecord = useRecordsStore((s) => s.addRecord);
   const updateRecord = useRecordsStore((s) => s.updateRecord);
   const closeForm = useRecordsStore((s) => s.closeForm);
+  const templates = useRecordsStore((s) => s.templates);
+  const templateToApply = useRecordsStore((s) => s.templateToApply);
+  const applyTemplate = useRecordsStore((s) => s.applyTemplate);
 
   const isEditing = !!editingRecord;
 
@@ -166,8 +171,68 @@ export const RecordForm: React.FC<RecordFormProps> = ({
         description: editingRecord.description,
       };
     }
+    if (templateToApply) {
+      const now = new Date();
+      const startH = String(now.getHours()).padStart(2, '0');
+      const startM = String(now.getMinutes()).padStart(2, '0');
+      const endDate = new Date(now.getTime() + 30 * 60 * 1000);
+      const endH = String(endDate.getHours()).padStart(2, '0');
+      const endM = String(endDate.getMinutes()).padStart(2, '0');
+
+      return {
+        title: '',
+        date: formatDate(now),
+        startTime: `${startH}:${startM}`,
+        endTime: `${endH}:${endM}`,
+        durationMinutes: 30,
+        noiseType: templateToApply.noiseType,
+        intensity: templateToApply.intensity,
+        location: templateToApply.location,
+        impactTagIds: [...templateToApply.impactTagIds],
+        description: templateToApply.description,
+      };
+    }
     return getDefaultState();
   });
+
+  const [showTemplateDropdown, setShowTemplateDropdown] = React.useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string | null>(
+    templateToApply?.id ?? null
+  );
+  const templateDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const sortedTemplates = React.useMemo(() => {
+    return [...templates].sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [templates]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        templateDropdownRef.current &&
+        !templateDropdownRef.current.contains(e.target as Node)
+      ) {
+        setShowTemplateDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectTemplate = (template: RecordTemplate) => {
+    setSelectedTemplateId(template.id);
+    setShowTemplateDropdown(false);
+
+    setFormState((prev) => ({
+      ...prev,
+      noiseType: template.noiseType,
+      intensity: template.intensity,
+      location: template.location,
+      impactTagIds: [...template.impactTagIds],
+      description: template.description,
+    }));
+
+    applyTemplate(template);
+  };
 
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [autoGenerateTitle, setAutoGenerateTitle] = React.useState(!isEditing);
@@ -343,6 +408,117 @@ export const RecordForm: React.FC<RecordFormProps> = ({
       )}
 
       <form onSubmit={handleSubmit} className={cn('space-y-6', className)} noValidate>
+        {!isEditing && templates.length > 0 && (
+          <div className="card-base p-5">
+            <SectionHeader title="选择模板" />
+            <div className="relative" ref={templateDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
+                className={cn(
+                  'w-full flex items-center justify-between px-4 py-3 rounded-lg border bg-white text-left',
+                  'hover:border-slate-300 hover:bg-slate-50',
+                  'focus:outline-none focus:ring-2 focus:ring-primary/30',
+                  'transition-all',
+                  showTemplateDropdown
+                    ? 'border-primary ring-2 ring-primary/20'
+                    : 'border-slate-200',
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Layers className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      {selectedTemplateId
+                        ? sortedTemplates.find((t) => t.id === selectedTemplateId)?.name ?? '选择一个模板'
+                        : '选择一个模板快速填充'}
+                    </p>
+                    {selectedTemplateId && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        已应用模板设置
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    'w-5 h-5 text-slate-400 transition-transform',
+                    showTemplateDropdown && 'rotate-180',
+                  )}
+                />
+              </button>
+
+              {showTemplateDropdown && (
+                <div
+                  className={cn(
+                    'absolute top-full left-0 right-0 z-20 mt-2',
+                    'bg-white border border-slate-200 rounded-xl shadow-lg',
+                    'animate-scale-in',
+                    'max-h-72 overflow-y-auto',
+                  )}
+                >
+                  <div className="p-1">
+                    {sortedTemplates.map((template) => {
+                      const isSelected = template.id === selectedTemplateId;
+                      const noiseConfig = getNoiseTypeConfig(template.noiseType);
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => handleSelectTemplate(template)}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left',
+                            'hover:bg-slate-50 transition-colors',
+                            isSelected && 'bg-primary/5',
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              'w-2 h-8 rounded-full shrink-0',
+                              noiseConfig.color.includes('amber')
+                                ? 'bg-amber-500'
+                                : noiseConfig.color.includes('orange')
+                                ? 'bg-orange-500'
+                                : noiseConfig.color.includes('red')
+                                ? 'bg-red-500'
+                                : noiseConfig.color.includes('purple')
+                                ? 'bg-purple-500'
+                                : noiseConfig.color.includes('blue')
+                                ? 'bg-blue-500'
+                                : noiseConfig.color.includes('pink')
+                                ? 'bg-pink-500'
+                                : noiseConfig.color.includes('cyan')
+                                ? 'bg-cyan-500'
+                                : noiseConfig.color.includes('yellow')
+                                ? 'bg-yellow-500'
+                                : noiseConfig.color.includes('green')
+                                ? 'bg-green-500'
+                                : 'bg-gray-500',
+                            )}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-700 truncate">
+                              {template.name}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">
+                              {formatNoiseType(template.noiseType)} · 强度 {template.intensity} 级
+                            </p>
+                          </div>
+                          {isSelected && (
+                            <Check className="w-4 h-4 text-primary shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="card-base p-5 space-y-5">
           <SectionHeader title="基本信息" required />
 
